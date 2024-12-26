@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Read De Bruijn Graph</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.6.1/d3.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #graph {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            width: 100%;
+            height: 600px;
+            position: relative;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin: 5px 0;
+        }
+        button {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Multi-Read De Bruijn Graph Generator</h1>
+    <label for="reads">Input Reads (comma-separated or line-separated):</label>
+    <textarea id="reads" placeholder="e.g., AGCTAGC, CGTAGCG, GCTAGCG"></textarea>
+    <label for="kmer">K-mer Size:</label>
+    <input type="number" id="kmer" value="3" min="2" max="10">
+    <button onclick="generateGraph()">Generate Graph</button>
+
+    <div id="graph"></div>
+
+    <script>
+        function generateGraph() {
+            const readsInput = document.getElementById("reads").value.trim();
+            const kmerSize = parseInt(document.getElementById("kmer").value);
+
+            if (!readsInput) {
+                alert("Please provide input reads.");
+                return;
+            }
+            if (isNaN(kmerSize) || kmerSize < 2) {
+                alert("Please provide a valid k-mer size (>= 2).");
+                return;
+            }
+
+            const reads = readsInput.split(/[\n,]+/).map(r => r.trim().toUpperCase());
+            if (reads.some(r => r.length < kmerSize)) {
+                alert("All reads must be at least as long as the k-mer size.");
+                return;
+            }
+
+            // Generate k-mers and edges with counts
+            const nodes = new Map(); // To track node counts
+            const edges = new Map(); // To track edge counts
+
+            reads.forEach(read => {
+                for (let i = 0; i <= read.length - kmerSize; i++) {
+                    const kmer = read.slice(i, i + kmerSize);
+                    const prefix = kmer.slice(0, -1);
+                    const suffix = kmer.slice(1);
+
+                    // Count nodes
+                    nodes.set(prefix, (nodes.get(prefix) || 0) + 1);
+                    nodes.set(suffix, (nodes.get(suffix) || 0) + 1);
+
+                    // Count edges
+                    const edgeKey = `${prefix}->${suffix}`;
+                    edges.set(edgeKey, (edges.get(edgeKey) || 0) + 1);
+                }
+            });
+
+            // Convert nodes to array for positioning
+            const nodeArray = Array.from(nodes.entries()).map(([id, count]) => ({ id, count }));
+
+            // Assign fixed positions for nodes
+            const width = document.getElementById("graph").offsetWidth;
+            const height = document.getElementById("graph").offsetHeight;
+            const xSpacing = width / (nodeArray.length + 1);
+
+            const positionedNodes = nodeArray.map((node, index) => ({
+                ...node,
+                x: 50 + index * xSpacing,
+                y: height / 2 + ((index % 2 === 0) ? -100 : 100), // Stagger vertically
+            }));
+
+            // Map node ids to their positions
+            const nodePositions = {};
+            positionedNodes.forEach(node => {
+                nodePositions[node.id] = { x: node.x, y: node.y };
+            });
+
+            // Clear any previous graph
+            const graphDiv = document.getElementById("graph");
+            graphDiv.innerHTML = "";
+
+            const svg = d3.select("#graph")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            // Define arrowhead marker
+            svg.append("defs")
+                .append("marker")
+                .attr("id", "arrowhead")
+                .attr("viewBox", "0 -5 10 10")
+                .attr("refX", 15) // Place arrow at the middle
+                .attr("refY", 0)
+                .attr("markerWidth", 6)
+                .attr("markerHeight", 6)
+                .attr("orient", "auto")
+                .append("path")
+                .attr("d", "M0,-5L10,0L0,5")
+                .attr("fill", "#666");
+
+            // Draw edges with arrows in the middle
+            svg.append("g")
+                .selectAll("line")
+                .data(Array.from(edges.entries()).map(([key, count]) => {
+                    const [source, target] = key.split("->");
+                    return { source, target, count };
+                }))
+                .enter()
+                .append("line")
+                .attr("x1", d => nodePositions[d.source].x)
+                .attr("y1", d => nodePositions[d.source].y)
+                .attr("x2", d => nodePositions[d.target].x)
+                .attr("y2", d => nodePositions[d.target].y)
+                .attr("stroke", (d, i) => d3.schemeCategory10[i % 10]) // Distinct colors
+                .attr("stroke-width", 2)
+                .attr("marker-end", "url(#arrowhead)"); // Arrow in the middle
+
+            // Add edge labels (counts)
+            svg.append("g")
+                .selectAll("text.edge-label")
+                .data(Array.from(edges.entries()).map(([key, count]) => {
+                    const [source, target] = key.split("->");
+                    return { source, target, count };
+                }))
+                .enter()
+                .append("text")
+                .attr("class", "edge-label")
+                .attr("x", d => (nodePositions[d.source].x + nodePositions[d.target].x) / 2)
+                .attr("y", d => (nodePositions[d.source].y + nodePositions[d.target].y) / 2)
+                .text(d => d.count)
+                .attr("font-size", 12)
+                .attr("fill", "#000");
+
+            // Draw nodes
+            svg.append("g")
+                .selectAll("circle")
+                .data(positionedNodes)
+                .enter()
+                .append("circle")
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y)
+                .attr("r", 10)
+                .attr("fill", "#69b3a2");
+
+            // Add node labels (counts)
+            svg.append("g")
+                .selectAll("text.node-label")
+                .data(positionedNodes)
+                .enter()
+                .append("text")
+                .attr("class", "node-label")
+                .text(d => `${d.id} (${d.count})`)
+                .attr("x", d => d.x)
+                .attr("y", d => d.y - 15) // Position above the nodes
+                .attr("font-size", 12)
+                .attr("text-anchor", "middle");
+        }
+    </script>
+</body>
+</html>
