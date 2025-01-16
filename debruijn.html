@@ -1,182 +1,516 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Read De Bruijn Graph</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.6.1/d3.min.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        #graph {
-            margin-top: 20px;
-            border: 1px solid #ddd;
-            width: 100%;
-            height: 600px;
-            position: relative;
-        }
-        textarea {
-            width: 100%;
-            height: 100px;
-            margin: 5px 0;
-        }
-        button {
-            margin: 5px 0;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <title>De Bruijn Graph Maker</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.6.1/d3.min.js"></script>
+  <style>
+    /* --------------------------
+       DARK THEME & UI STYLES
+       -------------------------- */
+    body {
+      background-color: #1e1e1e; /* Dark background */
+      color: #dddddd;           /* Light text */
+      font-family: "Century Gothic", sans-serif; 
+      margin: 20px;
+    }
+
+    #graph {
+      margin-top: 20px;
+      background-color: #2b2b2b; /* Slightly lighter background behind the graph */
+      border: 1px solid #444444;
+      width: 100%;
+      height: 600px;
+      position: relative;
+    }
+
+    textarea {
+      background-color: #333333;
+      color: #eeeeee;
+      border: 1px solid #444444;
+      padding: 8px;
+      font-size: 16px;
+      margin: 5px 0;
+      border-radius: 5px;
+      font-family: "Century Gothic", sans-serif;
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 16px;
+      margin: 8px 0;
+    }
+
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .slider-container label {
+      font-size: 16px;
+      margin-right: 6px;
+    }
+    .slider-value {
+      min-width: 20px;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    /* Thicker iOS-like slider styling */
+    input[type="range"].ios-slider {
+      -webkit-appearance: none; /* remove default look */
+      width: 150px;             /* adjust slider width */
+      height: 6px;              /* thicker track */
+      background-color: #444444;
+      border-radius: 5px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"].ios-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;              /* thumb size */
+      height: 20px;
+      border-radius: 50%;
+      background: #cccccc;
+      box-shadow: 0 0 2px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+    input[type="range"].ios-slider::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #cccccc;
+      box-shadow: 0 0 2px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+
+    /* Numeric input for K-mer */
+    .kmer-manual {
+      width: 60px;
+      background-color: #333333;
+      color: #eeeeee;
+      border: 1px solid #444444;
+      padding: 8px;
+      font-size: 16px;
+      border-radius: 5px;
+      text-align: center;
+      font-family: "Century Gothic", sans-serif;
+    }
+
+    button {
+      background-color: #444444;
+      color: #eeeeee;
+      border: 1px solid #444444;
+      font-size: 16px;
+      padding: 10px 20px;
+      margin: 5px 0;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: "Century Gothic", sans-serif;
+    }
+    button:hover {
+      background-color: #555555;
+    }
+
+    /* Edge label styling */
+    .edge-label {
+      fill: #ffffff;  /* White text for labels */
+      font-size: 12px;
+      text-anchor: middle;
+      font-family: "Century Gothic", sans-serif;
+    }
+
+    /* Node label styling */
+    .node-label {
+      fill: #ffffff;  /* White text for node labels */
+      font-size: 12px;
+      text-anchor: middle;
+      pointer-events: none; /* Let mouse events pass through */
+      font-family: "Century Gothic", sans-serif;
+    }
+  </style>
 </head>
+
 <body>
-    <h1>Multi-Read De Bruijn Graph Generator</h1>
-    <label for="reads">Input Reads (comma-separated or line-separated):</label>
-    <textarea id="reads" placeholder="e.g., AGCTAGC, CGTAGCG, GCTAGCG"></textarea>
-    <label for="kmer">K-mer Size:</label>
-    <input type="number" id="kmer" value="3" min="2" max="10">
+  <h1>De Bruijn Graph Maker</h1>
+
+  <label for="reads">Reads (comma or newline separated):</label><br>
+  <textarea id="reads" rows="4">ATGCTA
+CTAGTA
+TGCTAG
+GCTCAGT</textarea><br>
+
+  <div class="controls">
+    <!-- iOS-like slider for k-mer -->
+    <div class="slider-container">
+      <label for="kmerSlider">k-mer Size:</label>
+      <input 
+        id="kmerSlider"
+        class="ios-slider"
+        type="range"
+        min="2"
+        max="20"
+        step="1"
+        value="4"
+        oninput="syncKmerValueFromSlider()"
+      />
+      <span id="kmerValue" class="slider-value">4</span>
+    </div>
+
+    <!-- Manual numeric input for k-mer -->
+    <input 
+      id="kmerManual"
+      class="kmer-manual"
+      type="number"
+      min="2"
+      max="20"
+      value="4"
+      oninput="syncSliderFromKmerValue()"
+    />
+
     <button onclick="generateGraph()">Generate Graph</button>
+  </div>
 
-    <div id="graph"></div>
+  <div id="graph"></div>
 
-    <script>
-        function generateGraph() {
-            const readsInput = document.getElementById("reads").value.trim();
-            const kmerSize = parseInt(document.getElementById("kmer").value);
+  <script>
+    /* 
+      We'll keep track of the slider <-> numeric input synchronization
+      1) When the slider changes, update the numeric input
+      2) When the numeric input changes, update the slider
+      That way, the user can either slide or manually type a k-mer size.
+    */
 
-            if (!readsInput) {
-                alert("Please provide input reads.");
-                return;
-            }
-            if (isNaN(kmerSize) || kmerSize < 2) {
-                alert("Please provide a valid k-mer size (>= 2).");
-                return;
-            }
+    function syncKmerValueFromSlider() {
+      const slider = document.getElementById("kmerSlider");
+      const manual = document.getElementById("kmerManual");
+      const valSpan = document.getElementById("kmerValue");
 
-            const reads = readsInput.split(/[\n,]+/).map(r => r.trim().toUpperCase());
-            if (reads.some(r => r.length < kmerSize)) {
-                alert("All reads must be at least as long as the k-mer size.");
-                return;
-            }
+      valSpan.textContent = slider.value;  // update the label next to the slider
+      manual.value = slider.value;         // also update the numeric input
+    }
 
-            // Generate k-mers and edges with counts
-            const nodes = new Map(); // To track node counts
-            const edges = new Map(); // To track edge counts
+    function syncSliderFromKmerValue() {
+      const slider = document.getElementById("kmerSlider");
+      const manual = document.getElementById("kmerManual");
+      const valSpan = document.getElementById("kmerValue");
 
-            reads.forEach(read => {
-                for (let i = 0; i <= read.length - kmerSize; i++) {
-                    const kmer = read.slice(i, i + kmerSize);
-                    const prefix = kmer.slice(0, -1);
-                    const suffix = kmer.slice(1);
+      let val = parseInt(manual.value, 10);
+      if (isNaN(val)) val = 2; // fallback if user erases input
 
-                    // Count nodes
-                    nodes.set(prefix, (nodes.get(prefix) || 0) + 1);
-                    nodes.set(suffix, (nodes.get(suffix) || 0) + 1);
+      // clamp the value between 2 and 20
+      val = Math.max(2, Math.min(20, val));
+      manual.value = val;      // ensure it's in valid range
+      slider.value = val;
+      valSpan.textContent = val;
+    }
 
-                    // Count edges
-                    const edgeKey = `${prefix}->${suffix}`;
-                    edges.set(edgeKey, (edges.get(edgeKey) || 0) + 1);
-                }
-            });
 
-            // Convert nodes to array for positioning
-            const nodeArray = Array.from(nodes.entries()).map(([id, count]) => ({ id, count }));
+    /********************************************************
+     * 1) Read input, build De Bruijn graph (k-1)-mers => nodes, k-mers => edges.
+     * 2) Find the “start node” in a typical De Bruijn sense (outDeg = inDeg +1 or outDeg>0).
+     * 3) Walk coverage-based from that node, picking the highest coverage out-edge.
+     * 4) Highlight that path (nodes & edges) in red, everything else in gray.
+     * 5) Provide a thicker iOS-like slider & numeric input for k-mer size.
+     *******************************************************/
 
-            // Assign fixed positions for nodes
-            const width = document.getElementById("graph").offsetWidth;
-            const height = document.getElementById("graph").offsetHeight;
-            const xSpacing = width / (nodeArray.length + 1);
+    function generateGraph() {
+      // Ensure everything is synchronized
+      syncSliderFromKmerValue(); // or syncKmerValueFromSlider(), either is fine
 
-            const positionedNodes = nodeArray.map((node, index) => ({
-                ...node,
-                x: 50 + index * xSpacing,
-                y: height / 2 + ((index % 2 === 0) ? -100 : 100), // Stagger vertically
-            }));
+      const readsText = document.getElementById('reads').value.trim();
+      const k = parseInt(document.getElementById('kmerManual').value, 10);
 
-            // Map node ids to their positions
-            const nodePositions = {};
-            positionedNodes.forEach(node => {
-                nodePositions[node.id] = { x: node.x, y: node.y };
-            });
+      if (!readsText) {
+        alert("Please provide reads.");
+        return;
+      }
+      if (isNaN(k) || k < 2 || k > 20) {
+        alert("Please enter a valid k-mer size (2 <= k <= 20).");
+        return;
+      }
 
-            // Clear any previous graph
-            const graphDiv = document.getElementById("graph");
-            graphDiv.innerHTML = "";
+      // Split reads by newline or comma
+      const reads = readsText
+        .split(/[\n,]+/)
+        .map(s => s.trim().toUpperCase())
+        .filter(s => s.length > 0);
 
-            const svg = d3.select("#graph")
-                .append("svg")
-                .attr("width", width)
-                .attr("height", height);
+      // 1) Build De Bruijn graph
+      const { nodeArray, edgeArray } = buildDeBruijnGraph(reads, k);
 
-            // Define arrowhead marker
-            svg.append("defs")
-                .append("marker")
-                .attr("id", "arrowhead")
-                .attr("viewBox", "0 -5 10 10")
-                .attr("refX", 15) // Place arrow at the middle
-                .attr("refY", 0)
-                .attr("markerWidth", 6)
-                .attr("markerHeight", 6)
-                .attr("orient", "auto")
-                .append("path")
-                .attr("d", "M0,-5L10,0L0,5")
-                .attr("fill", "#666");
+      // 2) Build adjacency with in/out degrees
+      const { adjacency, inDegrees, outDegrees } = buildAdjacency(nodeArray, edgeArray);
 
-            // Draw edges with arrows in the middle
-            svg.append("g")
-                .selectAll("line")
-                .data(Array.from(edges.entries()).map(([key, count]) => {
-                    const [source, target] = key.split("->");
-                    return { source, target, count };
-                }))
-                .enter()
-                .append("line")
-                .attr("x1", d => nodePositions[d.source].x)
-                .attr("y1", d => nodePositions[d.source].y)
-                .attr("x2", d => nodePositions[d.target].x)
-                .attr("y2", d => nodePositions[d.target].y)
-                .attr("stroke", (d, i) => d3.schemeCategory10[i % 10]) // Distinct colors
-                .attr("stroke-width", 2)
-                .attr("marker-end", "url(#arrowhead)"); // Arrow in the middle
+      // 3) Find the "start node"
+      const startNode = findStartNode(adjacency, inDegrees, outDegrees);
 
-            // Add edge labels (counts)
-            svg.append("g")
-                .selectAll("text.edge-label")
-                .data(Array.from(edges.entries()).map(([key, count]) => {
-                    const [source, target] = key.split("->");
-                    return { source, target, count };
-                }))
-                .enter()
-                .append("text")
-                .attr("class", "edge-label")
-                .attr("x", d => (nodePositions[d.source].x + nodePositions[d.target].x) / 2)
-                .attr("y", d => (nodePositions[d.source].y + nodePositions[d.target].y) / 2)
-                .text(d => d.count)
-                .attr("font-size", 12)
-                .attr("fill", "#000");
+      // 4) Do coverage-based walk from that start node
+      const { edgesUsed, nodesUsed } = coverageWalk(startNode, adjacency);
 
-            // Draw nodes
-            svg.append("g")
-                .selectAll("circle")
-                .data(positionedNodes)
-                .enter()
-                .append("circle")
-                .attr("cx", d => d.x)
-                .attr("cy", d => d.y)
-                .attr("r", 10)
-                .attr("fill", "#69b3a2");
+      // 5) Render
+      drawGraph(nodeArray, edgeArray, edgesUsed, nodesUsed);
+    }
 
-            // Add node labels (counts)
-            svg.append("g")
-                .selectAll("text.node-label")
-                .data(positionedNodes)
-                .enter()
-                .append("text")
-                .attr("class", "node-label")
-                .text(d => `${d.id} (${d.count})`)
-                .attr("x", d => d.x)
-                .attr("y", d => d.y - 15) // Position above the nodes
-                .attr("font-size", 12)
-                .attr("text-anchor", "middle");
+    /**
+     * Build De Bruijn graph:
+     *  - node = (k-1)-mer => coverage is actual count
+     *  - edge = k-mer => coverage is actual count
+     */
+    function buildDeBruijnGraph(reads, k) {
+      const nodeSize = k - 1;
+
+      // Count (k-1)-mers => node coverage
+      const nodeCountMap = new Map();
+      for (const read of reads) {
+        if (read.length < nodeSize) continue;
+        for (let i=0; i <= read.length - nodeSize; i++) {
+          const nodeStr = read.slice(i, i + nodeSize);
+          nodeCountMap.set(nodeStr, (nodeCountMap.get(nodeStr) || 0) + 1);
         }
-    </script>
+      }
+
+      // Count k-mers => edge coverage
+      const edgeCountMap = new Map();
+      for (const read of reads) {
+        if (read.length < k) continue;
+        for (let i=0; i <= read.length - k; i++) {
+          const kmer = read.slice(i, i + k);
+          edgeCountMap.set(kmer, (edgeCountMap.get(kmer) || 0) + 1);
+        }
+      }
+
+      // nodeArray
+      const nodeArray = [];
+      for (const [id, coverage] of nodeCountMap.entries()) {
+        nodeArray.push({ id, coverage });
+      }
+
+      // edgeArray
+      let index = 0;
+      const edgeArray = [];
+      for (const [kmer, coverage] of edgeCountMap.entries()) {
+        const prefix = kmer.slice(0, k-1);
+        const suffix = kmer.slice(1);
+        edgeArray.push({
+          source: prefix,
+          target: suffix,
+          coverage,
+          index: index++
+        });
+      }
+      return { nodeArray, edgeArray };
+    }
+
+    /**
+     * Build adjacency, also track inDegrees and outDegrees
+     */
+    function buildAdjacency(nodeArray, edgeArray) {
+      const adjacency = new Map();
+      const inDegrees = new Map();
+      const outDegrees = new Map();
+
+      // Initialize
+      for (const n of nodeArray) {
+        adjacency.set(n.id, []);
+        inDegrees.set(n.id, 0);
+        outDegrees.set(n.id, 0);
+      }
+
+      // Populate
+      for (const e of edgeArray) {
+        // ensure source/target are in the map (even if not in nodeArray)
+        if (!adjacency.has(e.source)) {
+          adjacency.set(e.source, []);
+          inDegrees.set(e.source, 0);
+          outDegrees.set(e.source, 0);
+        }
+        if (!adjacency.has(e.target)) {
+          adjacency.set(e.target, []);
+          inDegrees.set(e.target, 0);
+          outDegrees.set(e.target, 0);
+        }
+
+        adjacency.get(e.source).push(e);
+        outDegrees.set(e.source, outDegrees.get(e.source) + 1);
+        inDegrees.set(e.target, inDegrees.get(e.target) + 1);
+      }
+
+      return { adjacency, inDegrees, outDegrees };
+    }
+
+    /**
+     * Find the "start node" in a typical De Bruijn sense:
+     *  1) If a node has outDegree = inDegree + 1, pick that
+     *  2) Otherwise, pick any node with outDegree > 0
+     */
+    function findStartNode(adjacency, inDegrees, outDegrees) {
+      for (const [node, outEdges] of adjacency.entries()) {
+        const outDeg = outDegrees.get(node) || 0;
+        const inDeg = inDegrees.get(node) || 0;
+        if (outDeg === inDeg + 1) {
+          return node; // perfect candidate
+        }
+      }
+      // Fallback: pick any node with outDegree > 0
+      for (const [node, outEdges] of adjacency.entries()) {
+        if ((outDegrees.get(node) || 0) > 0) {
+          return node;
+        }
+      }
+      return null; // no suitable node
+    }
+
+    /**
+     * From the start node, do a naive coverage-based walk:
+     * - at each step, pick the out-edge with the highest coverage that is not used yet
+     * - track used edges & nodes
+     */
+    function coverageWalk(startNode, adjacency) {
+      const edgesUsed = new Set();
+      const nodesUsed = new Set();
+      if (!startNode) {
+        return { edgesUsed, nodesUsed };
+      }
+
+      nodesUsed.add(startNode);
+
+      let current = startNode;
+      while (true) {
+        const outEdges = adjacency.get(current) || [];
+        const available = outEdges.filter(e => !edgesUsed.has(e.index));
+        if (available.length === 0) {
+          break;
+        }
+        // pick the highest coverage edge
+        let maxE = available[0];
+        for (let i=1; i<available.length; i++) {
+          if (available[i].coverage > maxE.coverage) {
+            maxE = available[i];
+          }
+        }
+        edgesUsed.add(maxE.index);
+        nodesUsed.add(maxE.target);
+        current = maxE.target;
+      }
+
+      return { edgesUsed, nodesUsed };
+    }
+
+    /**
+     * Draw the graph with D3
+     * - highlight nodesUsed & edgesUsed in red, others in gray
+     */
+    function drawGraph(nodeArray, edgeArray, edgesUsed, nodesUsed) {
+      const graphDiv = document.getElementById("graph");
+      graphDiv.innerHTML = "";
+
+      const width = graphDiv.offsetWidth;
+      const height = graphDiv.offsetHeight;
+
+      const svg = d3.select("#graph")
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+      // Arrowhead
+      svg.append("defs")
+        .append("marker")
+        .attr("id", "arrowhead")
+        .attr("viewBox", "0 -5 10 10")
+        .attr("refX", 30)
+        .attr("refY", 0)
+        .attr("markerWidth", 8)
+        .attr("markerHeight", 8)
+        .attr("orient", "auto")
+        .append("path")
+        .attr("d", "M0,-5L10,0L0,5")
+        .attr("fill", "#cccccc");
+
+      // Force simulation
+      const simulation = d3.forceSimulation(nodeArray)
+        .force("link", d3.forceLink(edgeArray).id(d => d.id).distance(100))
+        .force("charge", d3.forceManyBody().strength(-300))
+        .force("center", d3.forceCenter(width / 2, height / 2));
+
+      // Edges
+      const link = svg.selectAll("line")
+        .data(edgeArray)
+        .enter()
+        .append("line")
+        .attr("stroke-width", 2)
+        .attr("stroke", d => edgesUsed.has(d.index) ? "#ff3333" : "#cccccc")
+        .attr("marker-end", "url(#arrowhead)");
+
+      // Edge labels
+      const edgeLabel = svg.selectAll(".edge-label")
+        .data(edgeArray)
+        .enter()
+        .append("text")
+        .attr("class", "edge-label")
+        .text(d => d.coverage);
+
+      // Nodes
+      const node = svg.selectAll("circle")
+        .data(nodeArray)
+        .enter()
+        .append("circle")
+        .attr("r", 20)
+        .attr("fill", d => nodesUsed.has(d.id) ? "#ff3333" : "#666666")
+        .call(d3.drag()
+          .on("start", dragstarted)
+          .on("drag", dragged)
+          .on("end", dragended)
+        );
+
+      // Node labels
+      const nodeLabel = svg.selectAll(".node-label")
+        .data(nodeArray)
+        .enter()
+        .append("text")
+        .attr("class", "node-label")
+        .text(d => `${d.id} (${d.coverage})`);
+
+      // Ticking
+      simulation.on("tick", () => {
+        link
+          .attr("x1", d => d.source.x)
+          .attr("y1", d => d.source.y)
+          .attr("x2", d => d.target.x)
+          .attr("y2", d => d.target.y);
+
+        edgeLabel
+          .attr("x", d => (d.source.x + d.target.x) / 2)
+          .attr("y", d => (d.source.y + d.target.y) / 2);
+
+        node
+          .attr("cx", d => d.x)
+          .attr("cy", d => d.y);
+
+        nodeLabel
+          .attr("x", d => d.x)
+          .attr("y", d => d.y - 25);
+      });
+
+      // Drag
+      function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+      }
+      function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+      }
+      function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+      }
+    }
+  </script>
 </body>
 </html>
